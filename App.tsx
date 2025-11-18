@@ -60,7 +60,8 @@ export default function App() {
   const handleLogin = () => {
     // 1. Use the clean origin as the redirect URI
     const redirectUri = window.location.origin;
-    const authUrl = getAuthUrl(SPOTIFY_CLIENT_ID, redirectUri);
+    // Trim client ID to be safe
+    const authUrl = getAuthUrl(SPOTIFY_CLIENT_ID.trim(), redirectUri);
 
     console.log("Redirecting to Spotify...", { redirectUri, authUrl });
 

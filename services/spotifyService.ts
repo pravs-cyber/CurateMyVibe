@@ -11,14 +11,12 @@ const SCOPES = [
 ];
 
 export const getAuthUrl = (clientId: string, redirectUri: string) => {
-  const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: 'token',
-    redirect_uri: redirectUri,
-    scope: SCOPES.join(' '),
-    show_dialog: 'true'
-  });
-  return `https://accounts.spotify.com/authorize?${params.toString()}`;
+  // specific manual encoding to ensure Spotify compatibility
+  const scopeString = SCOPES.join('%20'); 
+  const cleanRedirect = encodeURIComponent(redirectUri);
+  
+  // strictly formatted URL construction
+  return `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${cleanRedirect}&scope=${scopeString}&show_dialog=true`;
 };
 
 export const getTokenFromUrl = () => {
