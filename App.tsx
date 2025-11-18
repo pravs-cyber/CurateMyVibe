@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Disc, Sliders, Sparkles, ListMusic, Music2, Loader2, CheckCircle2, User, LogIn, Settings, Zap, Waves } from 'lucide-react';
+import { Disc, Sliders, Sparkles, ListMusic, Music2, Loader2, CheckCircle2, User, LogIn, Settings, Zap, Waves, AlertCircle } from 'lucide-react';
 import { Song, FlowType, ImportedPlaylist, SpotifyConfig } from './types';
 import { curatePlaylist } from './services/geminiService';
 import { 
@@ -13,18 +13,19 @@ import {
 } from './services/spotifyService';
 import PlaylistView from './components/PlaylistView';
 import EnergyChart from './components/EnergyChart';
+import LandingPage from './components/LandingPage';
+
+// Hardcoded Client ID for CurateMyVibe
+const SPOTIFY_CLIENT_ID = '4e3a2a6d904243a886c0c131f404ac91';
 
 export default function App() {
   // --- Auth State ---
-  const [config, setConfig] = useState<SpotifyConfig>({
-    clientId: localStorage.getItem('spotify_client_id') || '',
-    redirectUri: window.location.origin + window.location.pathname
-  });
   const [token, setToken] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [currentRedirectUri, setCurrentRedirectUri] = useState<string>('');
 
   // --- App Flow State ---
-  const [appState, setAppState] = useState<'AUTH' | 'FETCHING_DATA' | 'CONFIGURING' | 'CURATING' | 'RESULTS'>('AUTH');
+  const [appState, setAppState] = useState<'LANDING' | 'AUTH' | 'FETCHING_DATA' | 'CONFIGURING' | 'CURATING' | 'RESULTS'>('LANDING');
   
   // --- Data State ---
   const [userPlaylists, setUserPlaylists] = useState<ImportedPlaylist[]>([]);
@@ -41,6 +42,11 @@ export default function App() {
 
   // 1. Initialization & Token Parsing
   useEffect(() => {
+    // Calculate the redirect URI once on mount
+    // We use window.location.origin to avoid trailing slashes which often break Spotify Auth
+    const origin = window.location.origin;
+    setCurrentRedirectUri(origin);
+
     const hash = getTokenFromUrl();
     if (hash.access_token) {
       setToken(hash.access_token);
@@ -48,15 +54,30 @@ export default function App() {
       setAppState('FETCHING_DATA');
       loadUserData(hash.access_token);
     }
+    // If no token, we stay on LANDING (default)
   }, []);
 
   const handleLogin = () => {
-    if (!config.clientId) {
-      setError("Please enter a valid Client ID");
-      return;
+    // 1. Use the clean origin as the redirect URI
+    const redirectUri = window.location.origin;
+    const authUrl = getAuthUrl(SPOTIFY_CLIENT_ID, redirectUri);
+
+    console.log("Redirecting to Spotify...", { redirectUri, authUrl });
+
+    // 2. Check if we are in an iframe (common in preview environments)
+    // Spotify blocks auth in iframes (X-Frame-Options: deny)
+    if (window.self !== window.top) {
+      try {
+        // Try to break out of the frame
+        window.top!.location.href = authUrl;
+      } catch (e) {
+        // If blocked by cross-origin policies, open in new tab
+        window.open(authUrl, '_blank');
+      }
+    } else {
+      // Standard redirect
+      window.location.href = authUrl;
     }
-    localStorage.setItem('spotify_client_id', config.clientId);
-    window.location.href = getAuthUrl(config.clientId, config.redirectUri);
   };
 
   const loadUserData = async (accessToken: string) => {
@@ -72,7 +93,13 @@ export default function App() {
       setAppState('CONFIGURING');
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to load Spotify data");
+      
+      // Specific error handling for Spotify Development Mode
+      if (err.message && (err.message.includes('User not registered') || err.message.includes('403'))) {
+         setError("Access Denied: This app is in Spotify Development Mode. Your email must be manually added to the Spotify Dashboard 'Users and Access' list to log in.");
+      } else {
+         setError(err.message || "Failed to load Spotify data");
+      }
       setAppState('AUTH');
     }
   };
@@ -165,7 +192,7 @@ export default function App() {
       setCuratedSongs([]);
       setError(null);
     } else {
-      setAppState('AUTH');
+      setAppState('LANDING');
     }
   };
 
@@ -197,56 +224,57 @@ export default function App() {
 
       <main className="max-w-6xl mx-auto px-6 py-10">
         
+        {/* PHASE 0: LANDING PAGE */}
+        {appState === 'LANDING' && (
+          <LandingPage onGetStarted={() => setAppState('AUTH')} />
+        )}
+
         {/* PHASE 1: AUTHENTICATION */}
         {appState === 'AUTH' && (
           <div className="flex flex-col items-center justify-center mt-10 animate-fade-in">
-            <div className="max-w-md w-full bg-slate-800/50 border border-slate-700 p-8 rounded-3xl shadow-2xl backdrop-blur-sm">
+            <div className="max-w-lg w-full bg-slate-800/50 border border-slate-700 p-8 rounded-3xl shadow-2xl backdrop-blur-sm">
               <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-white mb-2">Unlock Your Flow</h2>
+                <div className="w-16 h-16 bg-[#1DB954]/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <LogIn className="text-[#1DB954]" size={32} />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">Connect Spotify</h2>
                 <p className="text-slate-400">
-                  Connect Spotify to analyze audio features and architect the perfect playlist flow using AI.
+                  Unlock full access to your library to analyze audio features and architect the perfect playlist flow.
                 </p>
-              </div>
-
-              <div className="space-y-4 mb-8">
-                <div className="p-4 bg-slate-900/80 rounded-xl text-xs text-slate-400 border border-slate-700/80">
-                  <p className="font-semibold text-slate-300 mb-2 flex items-center gap-2">
-                    <Settings size={14} /> Configuration
-                  </p>
-                  <ol className="list-decimal pl-4 space-y-2">
-                    <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" className="text-cyan-400 hover:text-cyan-300 underline transition-colors">Spotify Developer Dashboard</a>.</li>
-                    <li>Create a new App.</li>
-                    <li>Add this EXACT Redirect URI:<br/>
-                      <code className="block mt-1 bg-black/50 px-2 py-1.5 rounded text-cyan-300 font-mono break-all border border-cyan-900/50">
-                        {config.redirectUri}
-                      </code>
-                    </li>
-                    <li>Paste the <strong>Client ID</strong> below.</li>
-                  </ol>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1 uppercase tracking-wider">Client ID</label>
-                  <input
-                    type="text"
-                    value={config.clientId}
-                    onChange={(e) => setConfig({...config, clientId: e.target.value})}
-                    placeholder="Paste your Client ID here"
-                    className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-3 text-sm outline-none transition-colors text-white placeholder-slate-600"
-                  />
-                </div>
               </div>
 
               <button 
                 onClick={handleLogin}
                 className="w-full bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold py-4 rounded-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2 shadow-lg shadow-green-900/20"
               >
-                <LogIn size={20} />
-                Authenticate with Spotify
+                <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_CMYK_Black.png" className="h-6 w-auto" alt="Spotify" />
+                Login with Spotify
               </button>
               
+              <div className="mt-8 pt-6 border-t border-slate-700/50 text-left space-y-4">
+                 <div className="flex items-start gap-2 text-sm text-slate-400 bg-slate-900/50 p-4 rounded-lg">
+                   <AlertCircle size={16} className="text-cyan-500 mt-0.5 shrink-0" />
+                   <div className="space-y-2">
+                     <p className="font-medium text-slate-300">Setup Checklist:</p>
+                     <ol className="list-decimal list-inside space-y-1 text-xs">
+                        <li>Go to <a href="https://developer.spotify.com/dashboard" target="_blank" className="text-cyan-400 underline hover:text-cyan-300">Spotify Dashboard</a></li>
+                        <li>Open your App Settings</li>
+                        <li>Add this <strong>EXACT</strong> Redirect URI:
+                          <div className="mt-1 p-2 bg-black/40 rounded border border-slate-700 font-mono text-cyan-400 break-all select-all">
+                            {currentRedirectUri}
+                          </div>
+                        </li>
+                        <li>Save Settings & Try Login again</li>
+                     </ol>
+                   </div>
+                 </div>
+              </div>
+              
               {error && (
-                <p className="mt-4 text-red-400 text-sm text-center bg-red-900/20 p-2 rounded border border-red-900/30">{error}</p>
+                <div className="mt-6">
+                   <p className="text-red-400 text-sm text-center bg-red-900/20 p-3 rounded border border-red-900/30">{error}</p>
+                   <button onClick={() => setError(null)} className="block mx-auto mt-2 text-xs text-slate-500 underline">Dismiss</button>
+                </div>
               )}
             </div>
           </div>

@@ -1,10 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Song, FlowType } from "../types";
 
-// Initialize Gemini Client
-// The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const modelName = "gemini-2.5-flash";
 
 export const curatePlaylist = async (
@@ -13,6 +9,17 @@ export const curatePlaylist = async (
   flowType: FlowType,
   includeRecommendations: boolean
 ): Promise<Song[]> => {
+  
+  // Initialize Gemini Client inside the function to avoid load-time crashes
+  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    console.error("API Key is missing");
+    throw new Error("Gemini API Key is not configured");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   
   // We provide a lean version of the source songs to the AI to save context
   // We include the ID so we can map it back to the real object later
